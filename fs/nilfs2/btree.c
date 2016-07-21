@@ -2288,6 +2288,20 @@ static int nilfs_btree_assign_gc(struct nilfs_bmap *btree,
 	__u64 key;
 	int ret;
 
+#if defined(YANQIN)
+  struct radix_tree_root *rtree = &(NILFS_BMAP_I(btree)->i_gc_blocks);
+  struct nilfs_gc_block_info *gbi;
+
+  /*
+  ** (*bh)->b_blocknr currently stores the virtual block number which
+  ** is assigned in function gc_read_
+  */
+  gbi = radix_tree_lookup(rtree, (*bh)->b_blocknr);
+  if (!gbi) {
+      printk(KERN_ERR "yjin: vblock 0x%llx not found\n", (__u64) (*bh)->b_blocknr);
+  } else
+      gbi->new_pblocknr = blocknr;
+#endif
 	ret = nilfs_dat_move(nilfs_bmap_get_dat(btree), (*bh)->b_blocknr,
 			     blocknr);
 	if (ret < 0)

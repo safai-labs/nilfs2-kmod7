@@ -27,6 +27,13 @@
 #include "the_nilfs.h"
 #include "bmap.h"
 
+#if defined(YANQIN)
+struct nilfs_gc_block_info {
+    __u64 old_pblocknr;
+    __u64 new_pblocknr;
+};
+#endif
+
 /**
  * struct nilfs_inode_info - nilfs inode data in memory
  * @i_flags: inode flags
@@ -68,6 +75,9 @@ struct nilfs_inode_info {
 					   disk inode */
 	struct nilfs_root *i_root;
 	struct inode vfs_inode;
+#if defined(YANQIN)
+  struct radix_tree_root i_gc_blocks;
+#endif
 };
 
 static inline struct nilfs_inode_info *NILFS_I(const struct inode *inode)

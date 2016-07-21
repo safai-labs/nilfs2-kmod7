@@ -71,6 +71,10 @@ int nilfs_gccache_submit_read_data(struct inode *inode, sector_t blkoff,
 {
 	struct buffer_head *bh;
 	int err;
+#if defined(YANQIN)
+  struct radix_tree_root *rtree = &(NILFS_I(inode)->i_gc_blocks);
+  struct nilfs_gc_block_info *gbi;
+#endif
 
 	bh = nilfs_grab_buffer(inode, inode->i_mapping, blkoff, 0);
 	if (unlikely(!bh))
@@ -108,6 +112,14 @@ int nilfs_gccache_submit_read_data(struct inode *inode, sector_t blkoff,
  out:
 	err = 0;
 	*out_bh = bh;
+#if defined(YANQIN)
+  set_bit(BH_PrivateStart, &bh->b_state);
+  gbi = kmalloc(sizeof(struct nilfs_gc_block_info), GFP_NOFS);
+  if (!gbi) return -ENOMEM;
+  gbi->old_pblocknr = pbn;
+  gbi->new_pblocknr = 0; /* To be assigned later */
+  err = radix_tree_insert(rtree, vbn, gbi);
+#endif
 
  failed:
 	unlock_page(bh->b_page);
@@ -137,11 +149,23 @@ int nilfs_gccache_submit_read_node(struct inode *inode, sector_t pbn,
 				   __u64 vbn, struct buffer_head **out_bh)
 {
 	int ret;
+#if defined(YANQIN)
+  struct radix_tree_root *rtree = &(NILFS_I(inode)->i_gc_blocks);
+  struct nilfs_gc_block_info *gbi;
+#endif
 
 	ret = nilfs_btnode_submit_block(&NILFS_I(inode)->i_btnode_cache,
 					vbn ? : pbn, pbn, READ, out_bh, &pbn);
 	if (ret == -EEXIST) /* internal code (cache hit) */
 		ret = 0;
+#if defined(YANQIN)
+  set_bit(BH_PrivateStart, &((*out_bh)->b_state));
+  gbi = kmalloc(sizeof(struct nilfs_gc_block_info), GFP_NOFS);
+  if (!gbi) return -ENOMEM;
+  gbi->old_pblocknr = pbn;
+  gbi->new_pblocknr = 0; /* To be assigned later */
+  ret = radix_tree_insert(rtree, vbn, gbi);
+#endif
 	return ret;
 }
 
@@ -174,6 +198,10 @@ int nilfs_init_gcinode(struct inode *inode)
 
 	ii->i_flags = 0;
 	nilfs_bmap_init_gc(ii->i_bmap);
+
+#if defined(YANQIN)
+  INIT_RADIX_TREE(&(ii->i_gc_blocks), GFP_NOFS);
+#endif
 
 	return 0;
 }

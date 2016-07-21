@@ -442,6 +442,25 @@ static int nilfs_segbuf_submit_bh(struct nilfs_segment_buffer *segbuf,
 
 	BUG_ON(wi->nr_vecs <= 0);
  repeat:
+#if defined(YANQIN)
+  if (test_bit(BH_PrivateStart, &(bh->b_state))) {
+      __u64 vblocknr, oblocknr;
+      struct inode *vfs_inode = bh->b_page->mapping->host;
+      struct radix_tree_root *rtree = &(NILFS_I(vfs_inode)->i_gc_blocks);
+      struct nilfs_gc_block_info *gbi;
+      vblocknr = bh->b_blocknr;
+      gbi = radix_tree_lookup(rtree, vblocknr);
+      if (!gbi)
+          printk(KERN_INFO "yjin: block %llx not found\n", vblocknr);
+      else {
+          oblocknr = gbi->old_pblocknr;
+          printk(KERN_INFO "yjin: v=%llx old=%llx\n", vblocknr, oblocknr);
+          radix_tree_delete(rtree, vblocknr);
+          kfree(gbi);
+      }
+      clear_bit(BH_PrivateStart, &(bh->b_state));
+  }
+#endif
 	if (!wi->bio) {
 		wi->bio = nilfs_alloc_seg_bio(wi->nilfs, wi->blocknr + wi->end,
 					      wi->nr_vecs);

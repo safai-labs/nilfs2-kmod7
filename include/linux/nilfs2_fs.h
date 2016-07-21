@@ -38,6 +38,10 @@
 #include <linux/magic.h>
 #include <linux/bug.h>
 
+#ifndef YANQIN
+#define YANQIN
+#endif
+
 
 #define NILFS_INODE_BMAP_SIZE	7
 /**

@@ -620,6 +620,12 @@ int init_nilfs(struct the_nilfs *nilfs, struct super_block *sb, char *data)
 	}
 	nilfs->ns_blocksize_bits = sb->s_blocksize_bits;
 	nilfs->ns_blocksize = blocksize;
+#if defined(YANQIN)
+  if (nilfs->ns_blocksize!=4096)
+      printk(KERN_ERR "yjin: file system block size must be 4096 bytes, %d given. [FAILED]\n", nilfs->ns_blocksize);
+  else
+      printk(KERN_INFO "yjin: file system block size is %d bytes. [OK]\n", nilfs->ns_blocksize);
+#endif
 
 	get_random_bytes(&nilfs->ns_next_generation,
 			 sizeof(nilfs->ns_next_generation));
