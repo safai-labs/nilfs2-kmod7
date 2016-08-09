@@ -35,6 +35,10 @@ struct nilfs_write_info {
 	int			max_pages;
 	int			nr_vecs;
 	sector_t		blocknr;
+#if defined(YANQIN)
+  sector_t    old_blocknr;
+  int io_type; /* Normal read/write or remap IO, 0 is normal, 1 is remap */
+#endif
 };
 
 static int nilfs_segbuf_write(struct nilfs_segment_buffer *segbuf,
@@ -369,6 +373,10 @@ static int nilfs_segbuf_submit_bio(struct nilfs_segment_buffer *segbuf,
 		}
 	}
 
+#if defined(YANQIN)
+  if (wi->io_type)
+      bio->bi_rw |= (1ULL << __REQ_NR_BITS);
+#endif
 	bio->bi_end_io = nilfs_end_bio_write;
 	bio->bi_private = segbuf;
 	bio_get(bio);
@@ -385,6 +393,9 @@ static int nilfs_segbuf_submit_bio(struct nilfs_segment_buffer *segbuf,
 	wi->rest_blocks -= wi->end - wi->start;
 	wi->nr_vecs = min(wi->max_pages, wi->rest_blocks);
 	wi->start = wi->end;
+#if defined(YANQIN)
+  wi->old_blocknr = 0;
+#endif
 	return 0;
 
  failed:
@@ -423,6 +434,46 @@ static struct bio *nilfs_alloc_seg_bio(struct the_nilfs *nilfs, sector_t start,
 	return bio;
 }
 
+#if defined(YANQIN)
+static struct bio *nilfs_alloc_seg_remap_bio(struct the_nilfs *nilfs, sector_t old_start_blocknr,
+                                             sector_t new_start_blocknr, int nr_vecs)
+{
+    struct bio *bio;
+    size_t sz;
+    unsigned long idx = BIO_POOL_NONE;
+    sector_t *ptr;
+    struct bio_vec *bvl = NULL;
+
+    sz = sizeof(struct bio) + nr_vecs * sizeof(struct bio_vec) + sizeof(sector_t);
+    bio = kzalloc(sz, GFP_NOIO);
+    if (bio == NULL) {
+        while (!bio && (nr_vecs >>= 1)) {
+            sz = sizeof(struct bio) + nr_vecs * sizeof(struct bio_vec) + sizeof(sector_t);
+            bio = kzalloc(sz, GFP_NOIO);
+        }
+    }
+    if (likely(bio)) {
+        ptr = (sector_t*) ((unsigned long long) bio + offsetof(struct bio, bi_inline_vecs) + nr_vecs * sizeof(struct bio_vec));
+        *ptr = old_start_blocknr << (nilfs->ns_blocksize_bits - 9);
+        bio_init(bio);
+        if (nr_vecs)
+            bvl = bio->bi_inline_vecs;
+        bio->bi_pool = NULL;
+        bio->bi_flags |= (idx << BIO_POOL_OFFSET);
+        bio->bi_max_vecs = nr_vecs;
+        bio->bi_io_vec = bvl;
+
+        bio->bi_bdev = nilfs->ns_bdev;
+#if HAVE_BI_ITER
+        bio->bi_iter.bi_sector = new_start_blocknr << (nilfs->ns_blocksize_bits - 9);
+#else
+        bio->bi_sector = new_start_blocknr << (nilfs->ns_blocksize_bits - 9);
+#endif
+    }
+    return bio;
+}
+#endif /* YANQIN */
+
 static void nilfs_segbuf_prepare_write(struct nilfs_segment_buffer *segbuf,
 				       struct nilfs_write_info *wi)
 {
@@ -432,6 +483,14 @@ static void nilfs_segbuf_prepare_write(struct nilfs_segment_buffer *segbuf,
 	wi->nr_vecs = min(wi->max_pages, wi->rest_blocks);
 	wi->start = wi->end = 0;
 	wi->blocknr = segbuf->sb_pseg_start;
+#if defined(YANQIN)
+  wi->old_blocknr = 0;
+  /*
+  ** Always start with normal IO, since we always use normal
+  ** IO to write segment summaries.
+  */
+  wi->io_type = 0;
+#endif
 }
 
 static int nilfs_segbuf_submit_bh(struct nilfs_segment_buffer *segbuf,
@@ -439,40 +498,73 @@ static int nilfs_segbuf_submit_bh(struct nilfs_segment_buffer *segbuf,
 				  struct buffer_head *bh, int mode)
 {
 	int len, err;
-
-	BUG_ON(wi->nr_vecs <= 0);
- repeat:
 #if defined(YANQIN)
-  if (test_bit(BH_PrivateStart, &(bh->b_state))) {
-      __u64 vblocknr, oblocknr;
-      struct inode *vfs_inode = bh->b_page->mapping->host;
-      struct radix_tree_root *rtree = &(NILFS_I(vfs_inode)->i_gc_blocks);
-      struct nilfs_gc_block_info *gbi;
+  __u64 vblocknr, oblocknr = 0;
+  struct inode *vfs_inode = bh->b_page->mapping->host;
+  struct radix_tree_root * rtree = NULL;
+  struct nilfs_gc_block_info *gbi = NULL;
+  int io_type = (test_bit(BH_PrivateStart, &bh->b_state)) ? 1 : 0;
+
+  if (io_type) {
+      rtree = &(NILFS_I(vfs_inode)->i_gc_blocks);
       vblocknr = bh->b_blocknr;
       gbi = radix_tree_lookup(rtree, vblocknr);
-      if (!gbi)
-          printk(KERN_INFO "yjin: block %llx not found\n", vblocknr);
-      else {
+      BUG_ON(gbi == NULL);
+      if (!gbi) {
+          printk(KERN_INFO "yjin: block 0x%lx not found\n", (unsigned long) vblocknr);
+          return -ENOENT;
+      } else {
           oblocknr = gbi->old_pblocknr;
-          printk(KERN_INFO "yjin: v=%llx old=%llx\n", vblocknr, oblocknr);
+          //printk(KERN_INFO "yjin: v=0x%llx new=0x%llx old=0x%llx\n", vblocknr, wi->blocknr+wi->end, oblocknr);
           radix_tree_delete(rtree, vblocknr);
           kfree(gbi);
       }
       clear_bit(BH_PrivateStart, &(bh->b_state));
   }
 #endif
+
+	BUG_ON(wi->nr_vecs <= 0);
+ repeat:
 	if (!wi->bio) {
+#if defined(YANQIN)
+      wi->io_type = io_type;
+      if (io_type) {
+          BUG_ON(oblocknr == 0);
+          wi->bio = nilfs_alloc_seg_remap_bio(wi->nilfs, oblocknr, wi->blocknr + wi->end,
+                  wi->nr_vecs);
+      } else {
+#endif
 		wi->bio = nilfs_alloc_seg_bio(wi->nilfs, wi->blocknr + wi->end,
 					      wi->nr_vecs);
+#if defined(YANQIN)
+      }
+#endif
 		if (unlikely(!wi->bio))
 			return -ENOMEM;
 	}
 
+#if defined(YANQIN)
+  if (io_type==wi->io_type) {
+      if (io_type) {
+          //printk(KERN_INFO "yjin wi->old_blocknr=0x%llx oblocknr=0x%llx\n", wi->old_blocknr, oblocknr);
+          if (wi->old_blocknr && wi->old_blocknr!=oblocknr)
+              goto submit_prev_bio;
+      }
+#endif
 	len = bio_add_page(wi->bio, bh->b_page, bh->b_size, bh_offset(bh));
 	if (len == bh->b_size) {
 		wi->end++;
+#if defined(YANQIN)
+    if (io_type)
+        wi->old_blocknr = oblocknr + 1;
+#endif
 		return 0;
 	}
+#if defined(YANQIN)
+  }
+  /* io_type is different or */
+submit_prev_bio:
+#endif
 	/* bio is FULL */
 	err = nilfs_segbuf_submit_bio(segbuf, wi, mode);
 	/* never submit current bh */
