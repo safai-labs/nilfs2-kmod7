@@ -1,5 +1,5 @@
 
-SUBDIRS = nilfs2
+SUBDIRS ?= nilfs2
 
 .PHONY: subdirs $(SUBDIRS)
 
