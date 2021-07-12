@@ -1,5 +1,5 @@
 
-SUBDIRS = nilfs2-$(shell uname -r | sed -E 's/(-[0-9]+).*/\1.el7/')
+SUBDIRS = nilfs2-$(shell uname -r | sed -E -e 's/(-[0-9]+)(\.[0-9]+)+/\1/' -e 's/\.x86_64//g')
 
 .PHONY: subdirs $(SUBDIRS)
 
