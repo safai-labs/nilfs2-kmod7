@@ -13,3 +13,4 @@ all clean install uninstall: $(SUBDIRS)
 
 $(SUBDIRS):
 	  $(MAKE) -C $@ $(RULE)
+
