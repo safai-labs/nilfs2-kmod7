@@ -1,5 +1,6 @@
 
-SUBDIRS = nilfs2-$(shell uname -r | sed -E -e 's/(-[0-9]+)(\.[0-9]+)+/\1/' -e 's/\.x86_64//g')
+VERSION ?= $(shell uname -r | sed -E -e 's/(-[0-9]+).*\.el7/\1.el7/' -e 's/\.x86_64//g' -e 's/-[0-9]+-generic/-generic/')
+SUBDIRS = nilfs2-$(VERSION)
 
 .PHONY: subdirs $(SUBDIRS)
 
