@@ -1,0 +1,26 @@
+
+
+Hi,
+
+This patchset implements modification of mkfs.nilfs2 and nilfs-tune
+utilities with the purpose to support xafile creation (on mkfs phase) or
+request of xafile initialization by file system driver for existed
+NILFS2 volume (on nilfs-tune phase).
+
+The patchset is suggested for review, testing and discussion only but
+*NOT* for inclusion in nilfs-utils repository.
+
+With the best regards,
+Vyacheslav Dubeyko.
+---
+
+ include/nilfs2_fs.h          |   16 +++++++++---
+ lib/feature.c                |    7 ++++++
+ man/mkfs.nilfs2.8            |    9 +++++++
+ man/nilfs-tune.8             |    9 +++++++
+ sbin/mkfs/mkfs.c             |   55 ++++++++++++++++++++++++++++++++++++++----
+ sbin/nilfs-tune/nilfs-tune.c |   20 +++++++++++++--
+ 6 files changed, 106 insertions(+), 10 deletions(-)
+-- 
+1.7.9.5
+

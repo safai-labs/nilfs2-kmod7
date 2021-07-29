@@ -1,0 +1,178 @@
+Hi Vyacheslav,
+
+Here is my additional comments on your xattrs support RFC.
+
+> The xanode of xafile can be two types:
+> (1) xanode is shared between several inodes (shared xanode);
+> (2) tree of xanodes is dedicated to one inode (tree xanode).
+> Every on-disk inode stores ID of xanode (i_xattr). This ID number
+> is used for getting access to xanode.
+
+The shared xanode you defined looks to be intended to share a disk
+block from several inodes (for efficiency of disk block usage) since
+nilfs_xattr_shared_key has a backpointer, an inode number field.
+
+I think you would rather consider sharing the same (small) attribute
+content among many inodes because the same attribute set is often
+associated to many files or directories widely, such as tree wide or
+file system wide.  For this type of block sharing, no inode number is
+needed in the attribute payload.
+
+For the tree of xanodes, it seems a bit inefficent because it is
+implemented over xafile (meta data file), and this introduces
+threefold tree lookups to access the target disk block:
+
+  xanode tree lookup --> xafile btree lookup --> DAT btree lookup
+
+Simple block chaining over xafile may be better for most cases.
+
+I think the tree-over-xafile implementation is a candidate, but please
+try considering ideas to replace the the tree based lookup into an
+index based access over xafile.
+
+For the inline xattr, I think it should not be mandatory.  It should
+be an option for users who wants faster accesses to the extended
+attributes and can accept reformat of the file system with 256-bit
+size inodes for that purpose.
+
+
+I will add more detail comments below.
+
+
+> /*
+>  * struct nilfs_inline_xanode_header - header of inline node
+>  * @magic: magic number for identification
+>  * @type: node type
+>  * @entries: number of entries in node
+>  * @log_node_size: log2(node size in bytes)
+
+log2(node size in bytes) - 10 ?
+
+4-bit width log_node_size only can represent 0~15 bytes.
+
+>  * @flags: node flags
+>  */
+> struct nilfs_inline_xanode_header {
+>         __le16 magic;
+
+Is this magic field necessary?   The reserved field
+at the end of the current disk inode is valuable.
+
+Setting the same magic number to all inodes seems wasteful.
+
+>         u8 type : 2;
+>         u8 entries : 6;
+>         u8 log_node_size : 4;
+>         u8 flags : 4;
+> } __packed;
+
+
+> struct nilfs_tree_xanode_header {
+>         __le16 magic;
+>         u8 type : 2;
+>         u8 entries_low : 6;
+>         u8 log_node_size : 4;
+>         u8 log_index_keys : 4;
+>         u8 flags;
+>         u8 entries_high;
+>         u8 height : 4;
+>         u8 index_keys_low : 4;
+>         u8 index_keys_high;
+>         __le32 checksum;
+>         __le64 prev;
+>         __le64 next;
+>         __le32 reserved;
+> } __packed;
+
+This "prev" and "next" member variables are not aligned to 8-byte
+boundary ("prev" has +12 bytes offset and "next" has +20 bytes
+offset).
+
+It is preferable to think memory alignment in __packed structures to
+avoid memory alignment error or performance penalty some architectures
+may suffer.
+
+
+> /*
+>  * struct nilfs_xattr_inline_key - xattr key for inline node
+>  * @type: key type
+>  * @flags: key's flags
+>  * @reserved: reserved field
+>  * @name_index: attribute name index
+>  * @name_hash: name hash
+>  * @entry_offset: entry offset inside the node
+>  * @entry_size: size of entry in bytes
+>  */
+> struct nilfs_xattr_inline_key {
+>         u8 type : 2;
+>         u8 flags : 6;
+>         u8 reserved;
+>         __le16 name_index;
+>         __le32 name_hash;
+>         __le16 entry_offset;
+>         __le16 entry_size;
+> } __packed;
+
+For what purpose is the type field used ?
+
+> struct nilfs_xattr_shared_key {
+>         u8 type : 2;
+>         u8 flags : 6;
+>         u8 reserved1;
+>         __le16 name_index;
+>         __le32 name_hash;
+>         __le16 entry_offset;
+>         __le16 entry_size;
+>         __le64 ino;
+> } __packed;
+
+The "ino" field has +12 bytes offset and is not aligned to 8 byte
+boundary.
+
+Again, the type field.  What is the difference between the type field
+and the flags field ?
+
+> struct nilfs_xattr_index_key {
+>         u8 type : 2;
+>         u8 flags : 6;
+>         u8 reserved1;
+>         __le16 name_index;
+>         __le32 name_hash;
+>         __le64 parent;
+>         __le64 leaf;
+> } __packed;
+
+Why is the "parent" field required ?
+
+The size of this structure is 24 bytes.
+It fits in 16 bytes structure if the parent field is eliminable.
+Otherwise, you need 8 more pad bytes to align on-disk structures 
+to 8 byte boundary.
+
+> struct nilfs_xattr_leaf_key {
+>         u8 type : 2;
+>         u8 flags : 6;
+>         u8 reserved1;
+>         __le16 name_index;
+>         __le32 name_hash;
+>         __le16 entry_offset;
+>         __le16 entry_size;
+> } __packed;
+
+This structure also needs pad bytes.
+
+> struct nilfs_xattr_entry {
+>         __le16 name_len;
+>         char name[0];
+> } __packed;
+
+Note that name_len must be aligned properly in the group of the
+nilfs_xattr_entry structure even though the name field has a variable
+size.
+
+You will need alignment calculation as NILFS_DIR_REC_LEN() macro
+provides for directory entries.
+
+
+With regards,
+Ryusuke Konishi

@@ -1,0 +1,29 @@
+From: Vyacheslav Dubeyko <slava@xxxxxxxxxxx>
+Subject: [RFC][STEP 1][PATCH v2 16/17] nilfs2: fix issue with chmod command
+
+This patch fix issue with "Operation not supported" message
+for the case of trying to use chmod command for NILFS2 volume
+that it doesn't contain xafile.
+
+Reported-by: Michael L. Semon <mlsemon35@xxxxxxxxx>
+Signed-off-by: Vyacheslav Dubeyko <slava@xxxxxxxxxxx>
+CC: Ryusuke Konishi <konishi.ryusuke@xxxxxxxxxxxxx>
+---
+ fs/nilfs2/acl.c |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/fs/nilfs2/acl.c b/fs/nilfs2/acl.c
+index 95b3601..7c3f366 100644
+--- a/fs/nilfs2/acl.c
++++ b/fs/nilfs2/acl.c
+@@ -185,7 +185,7 @@ int nilfs_acl_chmod(struct inode *inode)
+ 	struct posix_acl *acl;
+ 
+ 	if (!nilfs_has_xafile(nilfs))
+-		return -EOPNOTSUPP;
++		return 0;
+ 
+ 	if (S_ISLNK(inode->i_mode))
+ 		return -EOPNOTSUPP;
+-- 
+1.7.9.5

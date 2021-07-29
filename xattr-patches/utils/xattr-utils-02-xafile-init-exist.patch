@@ -1,0 +1,58 @@
+From: Vyacheslav Dubeyko <slava@xxxxxxxxxxx>
+Subject: [RFC][STEP 1][PATCH 2/4] nilfs-utils: add xafile_init and xafile_exist flags support
+
+This patch implements support of NILFS_FEATURE_COMPAT_INIT_XAFILE
+and NILFS_FEATURE_COMPAT_RO_XAFILE flags support in functionality
+of feature set routines.
+
+Signed-off-by: Vyacheslav Dubeyko <slava@xxxxxxxxxxx>
+CC: Ryusuke Konishi <konishi.ryusuke@xxxxxxxxxxxxx>
+---
+ lib/feature.c |    7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/lib/feature.c b/lib/feature.c
+index b3317b7..d3bef8f 100644
+--- a/lib/feature.c
++++ b/lib/feature.c
+@@ -55,9 +55,13 @@ struct nilfs_feature {
+ 
+ static const struct nilfs_feature features[] = {
+ 	/* Compat features */
++	{ NILFS_FEATURE_TYPE_COMPAT,
++	  NILFS_FEATURE_COMPAT_INIT_XAFILE, "xafile_init" },
+ 	/* Read-only compat features */
+ 	{ NILFS_FEATURE_TYPE_COMPAT_RO,
+ 	  NILFS_FEATURE_COMPAT_RO_BLOCK_COUNT, "block_count" },
++	{ NILFS_FEATURE_TYPE_COMPAT_RO,
++	  NILFS_FEATURE_COMPAT_RO_XAFILE, "xafile_exist" },
+ 	/* Incompat features */
+ 	/* End */
+ 	{ 0, 0, NULL }
+@@ -221,6 +225,7 @@ int nilfs_edit_feature(const char *str, __u64 *compat_array,
+ 		}
+ 
+ 		if (nilfs_string2feature(cp, &type, &mask) < 0) {
++			errno = ENODATA;
+ 			ret = -1;
+ 			break;
+ 		}
+@@ -231,6 +236,7 @@ int nilfs_edit_feature(const char *str, __u64 *compat_array,
+ 						NILFS_FEATURE_TYPE_NEGATE_FLAG;
+ 				if (bad_mask)
+ 					*bad_mask = mask;
++				errno = EINVAL;
+ 				ret = -1;
+ 				break;
+ 			}
+@@ -241,6 +247,7 @@ int nilfs_edit_feature(const char *str, __u64 *compat_array,
+ 					*bad_type = type;
+ 				if (bad_mask)
+ 					*bad_mask = mask;
++				errno = EINVAL;
+ 				ret = -1;
+ 				break;
+ 			}
+-- 
+1.7.9.5
+

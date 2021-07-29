@@ -1,0 +1,63 @@
+From: Vyacheslav Dubeyko <slava@xxxxxxxxxxx>
+Subject: [RFC][STEP 1][PATCH 1/4] nilfs-utils: add xattr related declarations
+
+This patch adds xattr related declarations.
+
+Signed-off-by: Vyacheslav Dubeyko <slava@xxxxxxxxxxx>
+CC: Ryusuke Konishi <konishi.ryusuke@xxxxxxxxxxxxx>
+---
+ include/nilfs2_fs.h |   16 +++++++++++++---
+ 1 file changed, 13 insertions(+), 3 deletions(-)
+
+diff --git a/include/nilfs2_fs.h b/include/nilfs2_fs.h
+index e674f44..fa05c05 100644
+--- a/include/nilfs2_fs.h
++++ b/include/nilfs2_fs.h
+@@ -92,6 +92,7 @@ struct nilfs_inode {
+  * @sr_dat: DAT file inode
+  * @sr_cpfile: checkpoint file inode
+  * @sr_sufile: segment usage file inode
++ * @sr_xafile: extended attributes file inode
+  */
+ struct nilfs_super_root {
+ 	__le32 sr_sum;
+@@ -101,6 +102,7 @@ struct nilfs_super_root {
+ 	struct nilfs_inode sr_dat;
+ 	struct nilfs_inode sr_cpfile;
+ 	struct nilfs_inode sr_sufile;
++	struct nilfs_inode sr_xafile;
+ };
+ 
+ #define NILFS_SR_MDT_OFFSET(inode_size, i)  \
+@@ -219,10 +221,18 @@ struct nilfs_super_block {
+  * If there is a bit set in the incompatible feature set that the kernel
+  * doesn't know about, it should refuse to mount the filesystem.
+  */
++#define NILFS_FEATURE_COMPAT_INIT_XAFILE	0x00000001ULL
++
+ #define NILFS_FEATURE_COMPAT_RO_BLOCK_COUNT	0x00000001ULL
++#define NILFS_FEATURE_COMPAT_RO_XAFILE		0x00000002ULL
++
++#define NILFS_FEATURE_COMPAT_SUPP \
++	(NILFS_FEATURE_COMPAT_INIT_XAFILE)
++
++#define NILFS_FEATURE_COMPAT_RO_SUPP	\
++	(NILFS_FEATURE_COMPAT_RO_BLOCK_COUNT | \
++	 NILFS_FEATURE_COMPAT_RO_XAFILE)
+ 
+-#define NILFS_FEATURE_COMPAT_SUPP	0ULL
+-#define NILFS_FEATURE_COMPAT_RO_SUPP	NILFS_FEATURE_COMPAT_RO_BLOCK_COUNT
+ #define NILFS_FEATURE_INCOMPAT_SUPP	0ULL
+ 
+ /*
+@@ -240,7 +250,7 @@ struct nilfs_super_block {
+ #define NILFS_SUFILE_INO	5	/* segment usage file */
+ #define NILFS_IFILE_INO		6	/* ifile */
+ #define NILFS_ATIME_INO		7	/* Atime file (reserved) */
+-#define NILFS_XATTR_INO		8	/* Xattribute file (reserved) */
++#define NILFS_XATTR_INO		8	/* Xattribute file */
+ #define NILFS_SKETCH_INO	10	/* Sketch file */
+ #define NILFS_USER_INO		11	/* Fisrt user's file inode number */
+ 
+-- 
+1.7.9.5
